@@ -1,0 +1,28 @@
+{
+    "id": "CADE649E",
+    "path": null,
+    "project_path": null,
+    "type": "object_explorer",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1710605827684.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "id": "f75c203325704ea3ac46116c80a21349",
+        "name": "rse",
+        "title": "rse",
+        "language": "R",
+        "source_window_id": "",
+        "Source": "Source"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 7018408550015333486,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1710605827684,
+    "read_only": false,
+    "read_only_alternatives": []
+}
