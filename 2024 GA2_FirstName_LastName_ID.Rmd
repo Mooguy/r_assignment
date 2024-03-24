@@ -119,8 +119,7 @@ library(ggplot2)
 library(magrittr)
 library(dplyr)
 library(SummarizedExperiment)
-
-kaka
+library(tidyverse)
 ```
 
 # TASK1: DESeq analysis of APEX-tagged genes
@@ -143,7 +142,6 @@ data were quantified using RSEM and gene annotations taken from RefSeq. The
 
 The file "rsem_files_ex.txt" consists in a table, *a.k.a* Design Matrix, assigning
 each file within the zipped archive has a specific condition and replicate number.
-
 
 ***Notes:***
 
@@ -183,6 +181,25 @@ subset the ***counts***, ***abundance*** and ***length*** data in `rse` (`rse` i
 
 
 ```{r echo=TRUE, warning=FALSE, 1a-load-data, message=F}
+ftab <- read.table('rsem_files_ex.txt')
+
+library(tximport)
+library(readr)
+
+rse <- tximport(files = file.path("Z:/guyilan/Rcourse/r_assignment/results", ftab$V1), 
+                type = "rsem")
+
+rse.bak <- rse
+
+#save(rse, file = "rse_backup.RData")
+
+##Filter out transcripts that their minimum length is shorter than 300:
+
+logical_vector <- apply(rse$length, 1, function(x) min(x) >= 300)
+
+rse$counts <- rse$counts[apply(rse$length, 1, min) >= 300,]
+rse$abundance <- rse$abundance[apply(rse$length, 1, min) >= 300,]
+rse$length <- rse$length[apply(rse$length, 1, min) >= 300,]
 
 ```
 
@@ -226,9 +243,28 @@ Use the function `counts()` to access count values from a DESeq results object.
 **Save** your answer in a variable `ANSWER3`
 ```{r echo=TRUE, 1b-DESEQ2, include=FALSE}
 
-ANSWER1 = ""
-ANSWER2 = ""
-ANSWER3 = ""
+cdat <- data.frame(
+  condition = as.factor(paste(ftab$V2, ftab$V3, sep = '_')),
+  replicate = as.factor(ftab$V4)
+)
+
+cdat$condition <- gsub('-', '_', cdat$condition)
+
+ds.txi <- DESeqDataSetFromTximport(txi = rse,
+                                colData = cdat,
+                                design = ~condition+replicate)
+
+ds <- DESeq(ds.txi, betaPrior = T)
+
+rows.keep <- rowSums(counts(ds)) > 10
+dds <- ds[rows.keep, ]
+
+retained <- sum(rows.keep) / length(ds.txi) * 100
+removed <- (length(ds.txi) - sum(rows.keep)) / length(ds.txi) * 100
+
+ANSWER1 = paste0("In this dataset we have ", nrow(ds.txi), " genes")
+ANSWER2= paste0(round(removed,2), "% genes were removed")
+ANSWER3= paste0(round(retained,2), "% genes were retained")
 
 ```
 
@@ -258,6 +294,21 @@ respective background (referred to as 'Input').<br>
 
 ```{r 1c-enrichment, echo=TRUE}
 
+mito_contrast <- c('condition', 'Mito_APEX2_RIP', 'Mito_APEX2_Input')
+er_contrast <- c('condition', 'KDEL_HRP_RIP', 'KDEL_HRP_Input')
+nls_contrast <- c('condition', 'NLS_APEX2_RIP', 'NLS_APEX2_Input')
+nes_contrast <- c('condition', 'NES_APEX2_RIP', 'NES_APEX2_Input')
+
+mito_results <- results(dds, contrast = mito_contrast, alpha = 0.05)
+kdel_results <- results(dds, contrast = er_contrast, alpha = 0.05)
+nls_results <- results(dds, contrast = nls_contrast, alpha = 0.05)
+nes_results <- results(dds, contrast = nes_contrast, alpha = 0.05)
+
+print(mito_results)
+print(kdel_results)
+print(nls_results)
+print(nes_results)
+
 ```
 
 ### Barplot: Strong DE genes
@@ -280,6 +331,27 @@ number of genes significantly regulated.
 
 ```{r echo=TRUE}
 
+num_DEGs_mito <- sum(mito_results$padj < 0.05 & abs(mito_results$log2FoldChange) > 1, na.rm = TRUE)
+num_DEGs_er <- sum(kdel_results$padj < 0.05 & abs(kdel_results$log2FoldChange) > 1, na.rm = TRUE)
+num_DEGs_nls <- sum(nls_results$padj < 0.05 & abs(nls_results$log2FoldChange) > 1, na.rm = TRUE)
+num_DEGs_nes <- sum(nes_results$padj < 0.05 & abs(nes_results$log2FoldChange) > 1, na.rm = TRUE)
+
+
+df <- data.frame(
+  Compartment = c('Mito', 'ER', 'NLS', 'NES'),
+  Num_DEGs = c(num_DEGs_mito, num_DEGs_er, num_DEGs_nls, num_DEGs_nes)
+)
+
+# Create the barplot using ggplot2
+deg_genes_barplot <- ggplot(df, aes(x = Compartment, y = Num_DEGs)) +
+  geom_bar(stat = 'identity', fill = 'steelblue') +
+  labs(
+    x = 'Compartment',
+    y = 'Number of DEGs',
+    title = paste('Number of Strong DE Genes: Mito:', num_DEGs_mito, 'ER:', num_DEGs_er, 'NLS:', num_DEGs_nls, 'NES:', num_DEGs_nes)
+  )
+
+deg_genes_barplot
 ```
 
 \newpage
@@ -306,7 +378,20 @@ function, ***cor = TRUE***.
 **Save** your answer in a variable `ANSWER4` 
 
 ```{r heatscatter, echo=TRUE}
-ANSWER4 = ""
+logFC_NLS <- nls_results$log2FoldChange
+logFC_NES <- nes_results$log2FoldChange
+
+pearson_corr <- cor(logFC_NLS, logFC_NES, method = "pearson")
+spearman_corr <- cor(logFC_NLS, logFC_NES, method = "spearman")
+
+ANSWER4 <- list(pearson_corr = pearson_corr, spearman_corr = spearman_corr)
+
+
+heatscatter(logFC_NLS, logFC_NES, cor = TRUE,
+            main = "HeatScatter Plot\nCorrelation between NLS and NES log2FoldChange")
+
+ANSWER4 =  paste("Pearson correlation coefficient: ", round(pearson_corr, 2), "\nSpearman correlation coefficient: ", round(spearman_corr, 2))
+
 ```
 
 \newpage
@@ -371,13 +456,29 @@ design data frame from the previous step.
 **Save** your answer in a variable `ANSWER5` (10 words maximum)
 
 ```{r 1d-sim.mat-hclust, echo=TRUE, cache=FALSE}
-ANSWER5 = ""
+rld <- rlog(dds)
+
+SE <- assay(rld)
+
+dsample <- dist(t(SE))
+
+m.dsample <- as.matrix(dsample)
+
+pheatmap(m.dsample,
+         clustering_distance_rows = dsample,
+         clustering_distance_cols = dsample,
+         cellwidth = 10,
+         show_colnames = FALSE,
+         show_rownames = FALSE,
+         fontsize = 5,
+         main = "Sample similarity as Euclidean distance",
+         display_numbers = TRUE)
+
+ANSWER5 = "KDEL_HRP RIP are most distant from the rest. "
 len.ANSWER5 = print(length(unlist(strsplit(ANSWER5,split = " ")))) # DON'T delete!
 ```
 
 ---
-
-
 
 # Task3: Data quailty and multiple testing  
 
@@ -390,7 +491,11 @@ len.ANSWER5 = print(length(unlist(strsplit(ANSWER5,split = " ")))) # DON'T delet
 > Important: Single cell data include information about the expression of genes within multiple cells. **Take** a moment and understand what the rows and columns of `data_sc` represent  
 
 ```{r read_data, echo=TRUE}
+data_sc <- readRDS('caron_mat.RDS')
 
+metadata_sc <- readRDS('caron_metadata.RDS')
+
+#In the mat file rows are genes and columns are cells
 ```
 
 ***Q6***: The values in `data_sc` are TPM (transcripts per million)/scaled (Centred Values are: Xi-mean(x))/centered (z-score values i.e. (Xi-mean(x))/sd(x) just like we have learned in the lesson about PCA)?<br> 
@@ -402,7 +507,15 @@ Explore the data in the following chunk:</br>
 ***Explain*** you answer (30 words **maximum**) and **save**  it in a variable `ANSWER6`. 
 
 ```{r q1, echo=TRUE}
-ANSWER6 = ""
+rowmeans = rowMeans(data_sc)
+meanBoxplot= boxplot(rowmeans, xlab= "Gene mean", ylab= "Value", main= "Mean of genes")
+
+colsum = colSums(data_sc)
+colsumPlot= plot(colsum, ylim= c(990000, 1010000), xlab= "cell", ylab= "sum of cell")
+
+
+ANSWER6= "data_sc is TPM, boxplot indicate the data is not centered (mean > 0) or scaled. Sum of columns show the data is TPM, all gene values sum to 1e6."
+
 len.ANSWER6 = print(length(unlist(strsplit(ANSWER6,split = " ")))) # DON'T delete!
 ```
 
@@ -413,6 +526,9 @@ len.ANSWER6 = print(length(unlist(strsplit(ANSWER6,split = " ")))) # DON'T delet
 3) **Save** the log transform data and centered data in a variable `cent_mat`
 
 ```{r log_center, echo=TRUE}
+log_data_sc <- log2((data_sc / 10) +1)
+
+cent_mat <- t(apply(log_data_sc, 1, function(x) x - mean(x)))
 
 ```
 
@@ -423,7 +539,14 @@ Calculate the complexity of each cell in the `log_data` (Apply the same calculat
 1) Keep cells with complexity larger than 500 and store the results in a variable `comp_up`
 
 ```{r comp, echo=TRUE}
+compute_comp <- function(tpm_data) {
+  Complexity <- apply(tpm_data > 0, 2, sum)
+  return(Complexity)
+}
 
+log_data_complexity <- compute_comp(log_data_sc)
+comp_threshold <- 500
+comp_up <- log_data_complexity > comp_threshold
 ```
 
 2) Filter `cent_mat` according to `comp_up`, keep cells with high complexity and **save** the filtered data set in `cent_filt`
@@ -433,6 +556,11 @@ Calculate the complexity of each cell in the `log_data` (Apply the same calculat
 3) Filter `log_data` according to `comp_up`, keep cells with high complexity and **save** the filtered data set in `log_data_filt`
 
 ```{r filter_cells, echo=TRUE}
+cent_filt <- cent_mat[, comp_up]
+
+metadata_sc_filt <- metadata_sc[comp_up, ]
+
+log_data_filt <- log_data_sc[comp_up, ]
 
 ```
 ## Finding the highly expressed genes
@@ -441,7 +569,11 @@ Using `log_data` (unfiltered by complexity) find the top 7000 genes with the hig
 **Save** in a variable `cent_final` a subset of `cent_filt` with only the top 7000 most expressed genes.
 
 ```{r filter_genes, echo=TRUE}
+gene_mean_expression <- rowMeans(log_data_sc)
 
+top_genes <- names(sort(gene_mean_expression, decreasing = TRUE)[1:7000])
+
+cent_final <- cent_filt[top_genes, ]
 ```
 
 ## Comparing gene expression between Malignant cell to non-Malignant cells<br>
@@ -453,6 +585,7 @@ Add a column to `metadata_sc_filt` that is called *Malignant*.
 If the cell type indicates it's malignant, put "Malignant" in the new column and "non-Malignant" otherwise. 
 
 ```{r Malig, echo=TRUE}
+metadata_sc_filt$Malignant= ifelse((is.na(metadata_sc_filt$cell_type) | metadata_sc_filt$cell_type != "Malignant"), "non-Malignant", "Malignant")
 
 ```
 
@@ -460,7 +593,16 @@ If the cell type indicates it's malignant, put "Malignant" in the new column and
 Draw a bar plot of the number of malignant cells against non malignant
 
 ```{r bar_plot, echo=TRUE}
+malignant_counts <- table(metadata_sc_filt$Malignant)
 
+malignant_df <- as.data.frame(malignant_counts)
+names(malignant_df) <- c("Category", "Count")
+
+ggplot(data = malignant_df, aes(x = Category, y = Count, fill = Category)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Cell Type", y = "Count", title = "Number of Malignant and Non-Malignant Cells") +
+  scale_fill_manual(values = c("Malignant" = "red", "non-Malignant" = "blue")) +
+  theme_minimal()
 
 ```
 
@@ -477,6 +619,11 @@ Draw a bar plot of the number of malignant cells against non malignant
 ```{r Sample, echo=TRUE}
 set.seed(2020) # Don't change!
 
+sampled_malig <- sample(metadata_sc_filt$cell_name[metadata_sc_filt$Malignant == "Malignant"], 
+                         size = 536, replace = FALSE)
+non_malignant <- metadata_sc_filt$cell_name[metadata_sc_filt$Malignant == "non-Malignant"]
+
+non_malignant <- non_malignant[!is.na(non_malignant)]
 
 ```
 
@@ -490,6 +637,16 @@ For each gene, perform a t.test between the sampled malignant cells to the non_m
 2) **Save** the p-values in a variable `p_values` and the adjusted p-values store in a vector named `p_adjusted` 
 
 ```{r t_test, echo=TRUE}
+malig_values <- cent_final[, sampled_malig]
+non_malig_values <- cent_final[, non_malignant]
+
+# Perform t-tests for each gene
+p_values = sapply(rownames(cent_final), function(x) {
+  t.test(cent_final[x,sampled_malig], 
+         cent_final[x,non_malignant])$p.value})
+
+# Apply BH FDR correction
+p_adjusted <- p.adjust(p_values, method = "BH")
 
 ```
 
@@ -502,10 +659,11 @@ For each gene, perform a t.test between the sampled malignant cells to the non_m
 
 **Save** your explaination in `ANSWER7` (maxium 30 words)
 ```{r echo=TRUE}
-readRDS("pvalue_hist.rds")
+load("pvalue_hist.rds")
 pvalue.hist(a = p_values,b = p_adjusted)
 
-ANSWER7 = ""
+ANSWER7 = "FDR method increases the values of the p-values, which results in fewer p-values being above the set alpha. Thus, the histogram of the "
+
 len.ANSWER7 = print(length(unlist(strsplit(ANSWER7,split = " ")))) # DON'T delete!
 ```
 
