@@ -1,8 +1,8 @@
 ---
 title: "General Assignment 2"
 subtitle: ""
-author: "Rcourse2023 Team"
-date: "February 9th, 2023"
+author: "Guy Ilan"
+date: "April 3rd, 2024"
 output:
   html_document:
     highlight: tango
@@ -180,7 +180,7 @@ You can make a logical vector to indicate which rows correspond to transcripts w
 subset the ***counts***, ***abundance*** and ***length*** data in `rse` (`rse` is a list that includes 3 data sets) with this logical vector.
 
 
-```{r echo=TRUE, warning=FALSE, 1a-load-data, message=F}
+```{r echo=TRUE, warning=FALSE, message=F}
 ftab <- read.table('rsem_files_ex.txt')
 
 library(tximport)
@@ -241,7 +241,7 @@ Use the function `counts()` to access count values from a DESeq results object.
 *Q3- What fraction (in %) of genes were retained?* 
 
 **Save** your answer in a variable `ANSWER3`
-```{r echo=TRUE, 1b-DESEQ2, include=FALSE}
+```{r echo=TRUE}
 
 cdat <- data.frame(
   condition = as.factor(paste(ftab$V2, ftab$V3, sep = '_')),
@@ -262,9 +262,9 @@ dds <- ds[rows.keep, ]
 retained <- sum(rows.keep) / length(ds.txi) * 100
 removed <- (length(ds.txi) - sum(rows.keep)) / length(ds.txi) * 100
 
-ANSWER1 = paste0("In this dataset we have ", nrow(ds.txi), " genes")
-ANSWER2= paste0(round(removed,2), "% genes were removed")
-ANSWER3= paste0(round(retained,2), "% genes were retained")
+ANSWER1 = paste0("In this dataset we have ", nrow(ds.txi), " genes with a length greater than 300")
+ANSWER2 = paste0(round(removed,2), "% genes were removed")
+ANSWER3 = paste0(round(retained,2), "% genes were retained")
 
 ```
 
@@ -304,10 +304,10 @@ kdel_results <- results(dds, contrast = er_contrast, alpha = 0.05)
 nls_results <- results(dds, contrast = nls_contrast, alpha = 0.05)
 nes_results <- results(dds, contrast = nes_contrast, alpha = 0.05)
 
-print(mito_results)
-print(kdel_results)
-print(nls_results)
-print(nes_results)
+summary(mito_results)
+summary(kdel_results)
+summary(nls_results)
+summary(nes_results)
 
 ```
 
@@ -390,7 +390,7 @@ ANSWER4 <- list(pearson_corr = pearson_corr, spearman_corr = spearman_corr)
 heatscatter(logFC_NLS, logFC_NES, cor = TRUE,
             main = "HeatScatter Plot\nCorrelation between NLS and NES log2FoldChange")
 
-ANSWER4 =  paste("Pearson correlation coefficient: ", round(pearson_corr, 2), "\nSpearman correlation coefficient: ", round(spearman_corr, 2))
+ANSWER4 =  paste("Pearson correlation coefficient: ", round(pearson_corr, 4), " Spearman correlation coefficient: ", round(spearman_corr, 4))
 
 ```
 
@@ -463,6 +463,7 @@ SE <- assay(rld)
 dsample <- dist(t(SE))
 
 m.dsample <- as.matrix(dsample)
+rownames(m.dsample) <- paste(ftab$V2, ftab$V3, ftab$V4)
 
 pheatmap(m.dsample,
          clustering_distance_rows = dsample,
@@ -474,8 +475,9 @@ pheatmap(m.dsample,
          main = "Sample similarity as Euclidean distance",
          display_numbers = TRUE)
 
-ANSWER5 = "KDEL_HRP RIP are most distant from the rest. "
+ANSWER5 = "KDEL_HRP RIP are most distant from the rest."
 len.ANSWER5 = print(length(unlist(strsplit(ANSWER5,split = " ")))) # DON'T delete!
+
 ```
 
 ---
@@ -526,7 +528,7 @@ len.ANSWER6 = print(length(unlist(strsplit(ANSWER6,split = " ")))) # DON'T delet
 3) **Save** the log transform data and centered data in a variable `cent_mat`
 
 ```{r log_center, echo=TRUE}
-log_data_sc <- log2((data_sc / 10) +1)
+log_data_sc <- log2(data_sc / 10 +1)
 
 cent_mat <- t(apply(log_data_sc, 1, function(x) x - mean(x)))
 
@@ -560,7 +562,7 @@ cent_filt <- cent_mat[, comp_up]
 
 metadata_sc_filt <- metadata_sc[comp_up, ]
 
-log_data_filt <- log_data_sc[comp_up, ]
+log_data_filt <- log_data_sc[,comp_up]
 
 ```
 ## Finding the highly expressed genes
@@ -601,7 +603,6 @@ names(malignant_df) <- c("Category", "Count")
 ggplot(data = malignant_df, aes(x = Category, y = Count, fill = Category)) +
   geom_bar(stat = "identity") +
   labs(x = "Cell Type", y = "Count", title = "Number of Malignant and Non-Malignant Cells") +
-  scale_fill_manual(values = c("Malignant" = "red", "non-Malignant" = "blue")) +
   theme_minimal()
 
 ```
@@ -640,13 +641,11 @@ For each gene, perform a t.test between the sampled malignant cells to the non_m
 malig_values <- cent_final[, sampled_malig]
 non_malig_values <- cent_final[, non_malignant]
 
-# Perform t-tests for each gene
 p_values = sapply(rownames(cent_final), function(x) {
   t.test(cent_final[x,sampled_malig], 
          cent_final[x,non_malignant])$p.value})
 
-# Apply BH FDR correction
-p_adjusted <- p.adjust(p_values, method = "BH")
+p_adjusted <- p.adjust(p_values, method = "fdr")
 
 ```
 
@@ -662,7 +661,7 @@ p_adjusted <- p.adjust(p_values, method = "BH")
 load("pvalue_hist.rds")
 pvalue.hist(a = p_values,b = p_adjusted)
 
-ANSWER7 = "FDR method increases the values of the p-values, which results in fewer p-values being above the set alpha. Thus, the histogram of the "
+ANSWER7 = "FDR method increases the values of the p-values, which results in fewer p-values being above the set alpha. Thus, B represents the p-adjusted with less significant values (left-most bin)."
 
 len.ANSWER7 = print(length(unlist(strsplit(ANSWER7,split = " ")))) # DON'T delete!
 ```
